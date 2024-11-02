@@ -39,6 +39,12 @@ _maxEPC = 200
 
 
 -- Functions
+
+function round(num, numDecimalPlaces, numPlaces)
+    return string.format("%" .. (numPlaces or 0) .. "." .. (numDecimalPlaces or 0) .. "f", num)
+end
+
+
 local function addEntry(inTable, inEntry)
     -- Add the new entry to the table
 
@@ -52,30 +58,64 @@ end
 
 local function getTrend(values)
     local trends = {}
+    local rate = 0
+    local total = 0
+    local count = 0
+
+    for i = 1, #values do
+        total = total + values[i] 
+        count = count + 1
+    end
+
+    local averageValue = total / count
+
     for i = 2, #values do
-        trends[i-1] = values[i] - values[i-1]
+        --trends[i-1] = values[i] - values[i-1]
+        trends[i-1] = averageValue - values[i-1]
+        rate = round(trends[i-1],0)
     end
     
-    local trendType = "stable    "
+    local trendType = "calculating"
     for _, change in ipairs(trends) do
-        if change > 0 then
-            trendType = "increasing"
-        elseif change < 0 then
-            trendType = "decreasing"
-            break
+        if change > 2 then
+            trendType = "increasing "
+        elseif change < -2 then
+            trendType = "decreasing "
+        else             
+            trendType = "stable     "
         end
+        
     end    
-    return trendType
+
+    trendData = {}
+    trendData[1] = trendType
+    trendData[2] = rate
+    return trendData
 end
 
+local function padNumber(input,pad) 
+    return string.format("% ".. pad .. "d", input)
+end
+
+--local function lpad(str, len, char)
+--    str = tostring(str)
+--    if char == nil then char = " " end
+--    return str .. string.rep(char, len - #str)
+--end
+
+
+-- pad the left side
+local lpad =
+	function (s, l, c)
+        s = tostring(s)
+		local res = string.rep(c or ' ', l - #s) .. s
+		return res
+	end
 
 function sortingFunction(machine1, machine2)
     return machine1.Nick < machine2.Nick
 end
 
-function round(num, numDecimalPlaces, numPlaces)
-    return string.format("%" .. (numPlaces or 0) .. "." .. (numDecimalPlaces or 0) .. "f", num)
-end
 
 function getContainerAmount(container)
     containerAmount = 0
@@ -100,24 +140,16 @@ end
 
 
 -- Draws background and title
-function DrawBackground()
+function DrawBackground(title)
     gpu:setBackground(1, 0.2, 0.02, 0.5)
     gpu:setForeground(1, 1, 1, 1)
     w, h = gpu:getSize()
     gpu:fill(0, 0 + _screenOffset, w, 1, " ")
     gpu:flush()
 
-    gpu:setText(3, 0 + _screenOffset, "Uranium Waste Recycling Plant")
+    gpu:setText(3, 0 + _screenOffset, title)
     gpu:flush()
 end
-
-
-
-
-
-
-
-
 
 
 -- Get containers
@@ -189,7 +221,7 @@ screen = component.proxy(_display)
 gpu:bindScreen(screen)
 
 ClearScreen()
-DrawBackground()
+DrawBackground("Uranium Waste Recycling Centre")
 
 wasteAmounts = {}
 nfuAmounts = {}
@@ -201,6 +233,10 @@ nfuCounter = 0
 plpCounter = 0
 epcCounter = 0
 
+wasteRate = 0
+nfuRate = 0
+plpRate = 0
+epcRate = 0
 
 while true do
 
@@ -219,16 +255,27 @@ while true do
 
     if dataCounter == _maxCounter then
         addEntry(wasteAmounts,wasteAmount)
-        wasteTrend = getTrend(wasteAmounts)
+        wasteData = getTrend(wasteAmounts)
+        wasteTrend = wasteData[1]
+        wasteRate = wasteData[2]
 
         addEntry(nfuAmounts,nfuAmount)
-        nfuTrend = getTrend(nfuAmounts)
+        nfuData = getTrend(nfuAmounts)
+        nfuTrend = nfuData[1]
+        nfuRate = nfuData[2]
+       -- nfuTrend = getTrend(nfuAmounts)[1]
 
         addEntry(plpAmounts,plpAmount)
-        plpTrend = getTrend(nfuAmounts)
+        plpData = getTrend(plpAmounts)
+        plpTrend = plpData[1]
+        plpRate = plpData[2]
+        --plpTrend = getTrend(plpAmounts)[1]
 
         addEntry(epcAmounts,epcAmount)
-        epcTrend = getTrend(nfuAmounts)
+        epcData = getTrend(epcAmounts)
+        epcTrend = epcData[1]
+        epcRate = epcData[2]
+        --epcTrend = getTrend(epcAmounts)[1]
 
         dataCounter = 0
     end
@@ -244,7 +291,7 @@ while true do
 
     for i,machine in ipairs(machinesNFU) do
         if machine.productionBoost ~= nfuProductionBoost and machine.maxProductionBoost >= nfuProductionBoost then
-            print("Setting potential for " .. machine.Nick .. " to " .. math.floor(nfuProductionBoost * 100) .. "%")
+            --print("Setting potential for " .. machine.Nick .. " to " .. math.floor(nfuProductionBoost * 100) .. "%")
             machine:setProductionBoost(nfuProductionBoost)
         end
     end
@@ -262,7 +309,7 @@ while true do
 
     for i,machine in ipairs(machinesPLP) do
         if machine.potential ~= plpPotential and machine.maxPotential >= plpPotential then
-            print("Setting potential for " .. machine.Nick .. " to " .. math.floor(plpPotential * 100) .. "%")
+            --print("Setting potential for " .. machine.Nick .. " to " .. math.floor(plpPotential * 100) .. "%")
             machine:setPotential(plpPotential)
         end
     end
@@ -280,7 +327,7 @@ while true do
 
     for i,machine in ipairs(machinesEPC) do
         if machine.potential ~= epcPotential and machine.maxPotential >= epcPotential then
-            print("Setting potential for " .. machine.Nick .. " to " .. math.floor(epcPotential * 100) .. "%")
+            --print("Setting potential for " .. machine.Nick .. " to " .. math.floor(epcPotential * 100) .. "%")
             machine:setPotential(epcPotential)
         end
     end
@@ -298,15 +345,15 @@ while true do
 
     for i,machine in ipairs(machinesPFR) do
         if machine.potential ~= pfrPotential and machine.maxPotential >= pfrPotential then
-            print("Setting potential for " .. machine.Nick .. " to " .. math.floor(pfrPotential * 100) .. "%")
+            --print("Setting potential for " .. machine.Nick .. " to " .. math.floor(pfrPotential * 100) .. "%")
             machine:setPotential(pfrPotential)
         end
     end
 
-    gpu:setText(3, 2 + _screenOffset, "Uranium Waste           : " .. wasteAmount .. " - " .. wasteTrend)
-    gpu:setText(3, 3 + _screenOffset, "Non-fissle Uranium      : " .. nfuAmount .. " - " .. nfuTrend)
-    gpu:setText(3, 4 + _screenOffset, "Plutonium Pellets       : " .. plpAmount .. " - " .. plpTrend)
-    gpu:setText(3, 5 + _screenOffset, "Encased Plutonium Cells : " .. epcAmount .. " - " .. epcTrend)
+    gpu:setText(3, 2 + _screenOffset, "Uranium Waste           : " .. lpad(wasteAmount,6," ") .. " - " .. wasteTrend .. " " .. lpad(wasteRate,5," ") .. "/min")
+    gpu:setText(3, 3 + _screenOffset, "Non-Fissle Uranium      : " .. lpad(nfuAmount,6," ") .. " - " .. nfuTrend .. " " .. lpad(nfuRate,5," ") .. "/min")
+    gpu:setText(3, 4 + _screenOffset, "Plutonium Pellets       : " .. lpad(plpAmount,6," ") .. " - " .. plpTrend .. " " .. lpad(plpRate,5," ") .. "/min")
+    gpu:setText(3, 5 + _screenOffset, "Encased Plutonium Cells : " .. lpad(epcAmount,6," ") .. " - " .. epcTrend .. " " .. lpad(epcRate,5," ") .. "/min")
 
     gpu:setText(3, 9 + _screenOffset, "Non-Fissle Uranium      : " .. nfuStatus)
     gpu:setText(3, 10 + _screenOffset, "Plutonium Pellets       : " .. plpStatus)
