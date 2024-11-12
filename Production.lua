@@ -1,13 +1,12 @@
 ---@diagnostic disable: param-type-mismatch, undefined-global, lowercase-global
 -- Configurable Variables --
-_input = "Various"                        -- Input of Recipe used in Machine
-_output = "Ficsonium Fuel Rodw"                       -- Output of Recipe used in Machine
-_building = "FFFR"  
-_floor = "F3"                         -- Name of building encompassing multiple manufacturings
-_machineType = "FFR"                   -- Nickname/Groups of machines (This name needs to be equal to the name of the machines)
-_display = "721CD6C1467826F72BB36A9A23482CD1"  -- ID of the Large Screen
-_screenWidth = 70                              -- Adjustable width of Large Screen
-_screenHeight = 33                             -- Adjustable height of Large Screen
+                  -- Output of Recipe used in Machine
+_building = "F_ECR"  
+_floor = "L_03"                         -- Name of building encompassing multiple manufacturings
+_machineType = "I_ECR"                   -- Nickname/Groups of machines (This name needs to be equal to the name of the machines)
+--_display = "D97856474FE177531459D686C925D757"  -- ID of the Large Screen
+_screenWidth = 40                              -- Adjustable width of Large Screen
+_screenHeight = 40                             -- Adjustable height of Large Screen
 
 -- Variables --
 _machineCount = 0
@@ -28,15 +27,22 @@ end
 
 
 -- Fetch machines --
+_display = component.proxy(component.findComponent("Display " .. _machineType))
+
 machineIDs = component.proxy(component.findComponent(_machineType))
 
 machines = {}
 
 for i, machine in ipairs(machineIDs) do
-    table.insert(machines, machine)
-    _machineCount = _machineCount + 1
+	machineCheck = machine.canChangePotential
+    if machineCheck == true then
+    	table.insert(machines, machine)
+    	_machineCount = _machineCount + 1
+    end
    
 end
+
+print(_machineCount)
 
 table.sort(machines, sortingFunction)
 
@@ -45,8 +51,10 @@ _screenOffset = math.floor((_screenHeight - _machineCount - 9) / 2)
 
 -- Fetch Large Display --
 gpu = computer.getPCIDevices(classes.GPU_T1_C)[1]
-screen = component.proxy(_display)
+screen = component.proxy(component.findComponent("Display " .. _machineType))[1]
 gpu:bindScreen(screen)
+
+print(gpu:getSize())
 
 -- Utilities --
 function round(num, numDecimalPlaces, numPlaces)
@@ -70,6 +78,7 @@ function PrintData()
     totalProductivity = 0
     totalProducts = 0
     totalOutput = 0
+    totalOutputExpected = 0
 
     gpu:setBackground(0, 0, 0, 1)
     gpu:setForeground(1, 1, 1, 1)
@@ -84,7 +93,7 @@ function PrintData()
 
     productsProduced = {}
     for p, product in pairs(products) do
-        productsProduced[p] = (60 / machines[1].cycleTime) * products[p].amount
+        productsProduced[p] = ((60 / machines[1].cycleTime) * products[p].amount) / machines[1].potential
     end
  
 
@@ -115,33 +124,32 @@ function PrintData()
 
         machineInputInv = machine:getInputInv()
 
-                invItems = {}
-                for j = 0, machineInputInv.size do
-                    local stack = machineInputInv:getStack(j)
-                    if stack ~= nil and stack.item ~= nil and stack.item.type ~= nil then
-                        
-                        minItems = stack.item.type.max / 2
-                        actualItems = stack.count
-                        print(stack.item.type.name .. " - " ..actualItems .. " / " .. minItems)
-                        if actualItems < minItems then
-                            print(stack.item.type.name)
-                        end
-                        --for m, v in pairs(invItems) do
-                        --    print(m .. " - " .. v)
-                        --end
-                    end
+        invItems = {}
+        for j = 0, machineInputInv.size do
+            local stack = machineInputInv:getStack(j)
+            if stack ~= nil and stack.item ~= nil and stack.item.type ~= nil then                        
+                minItems = stack.item.type.max / 2
+                actualItems = stack.count
+                --print(stack.item.type.name .. " - " ..actualItems .. " / " .. minItems)
+                if actualItems < minItems then
+                    --print(stack.item.type.name)
                 end
+            end
+        end
                 
         machineFactoryConnectors= machine:getFactoryConnectors()      
 
         for j, connector in ipairs(machineFactoryConnectors) do
-            print(connector.blocked)
+            --print(connector.blocked)
         end
 
         machinePotential = machine.potential
 
         machineProductivity = round(machine.productivity * 100, 1, 5)
         machineOutput = round(((machineProductivity / 100) * productsProduced[1]) * machinePotential, 1, 4)
+        machineOutputExpected = round(( productsProduced[1]) * machinePotential, 1)
+        
+        print(productsProduced[1])
 
         -- Instantiate variables --
         if not _lastRate[i] then
@@ -169,7 +177,7 @@ function PrintData()
                         minItems = stack.item.type.max / 2
                         actualItems = stack.count
                         if actualItems < minItems then
-                            print(stack.item.type.name)
+                            --print(stack.item.type.name)
                         end
                         --for m, v in pairs(invItems) do
                         --    print(m .. " - " .. v)
@@ -203,14 +211,30 @@ function PrintData()
         totalProducts = totalProducts + machineOutput
         totalRate = round((totalProductivity / _machineCount), 1)
         totalOutput = totalOutput + machineOutput
+        totalOutputExpected = totalOutputExpected + machineOutputExpected
 
-        gpu:flush()
+       
+        if  machine.productivity < 1 then
+            gpu:setBackground(1, 0, 0, 1)
+        else
+            gpu:setBackground(0, 1, 0, 0.3)
+        end
+
         gpu:setText(3, i + 3 + _screenOffset, (machineID .. " | " .. machineProductivity .. "% | " .. BoolToState(_lastState[i])))
+        gpu:flush()
+
+    end
+
+    if  totalRate < 100 then
+        gpu:setBackground(1, 0, 0, 1)
+    else
+        gpu:setBackground(0, 1, 0, 0.3)
     end
 
 
+
     --gpu:setText(3, _machineCount + 6 + _screenOffset, "Total Input: " .. round(totalIngredients, 1) .. " / " .. round(totalInput,1))
-    gpu:setText(3, _machineCount + 5 + _screenOffset, "Total Output: " .. round(totalProducts, 1) .. " / " .. round(totalOutput,1))
+    gpu:setText(3, _machineCount + 5 + _screenOffset, "Total Output: " .. round(totalProducts, 1) .. " / " .. round(totalOutputExpected,1))
     gpu:setText(3, _machineCount + 6 + _screenOffset, "Total Rate:   " .. round(totalRate, 1) .. "%")
 
     gpu:setBackground(1, 0.2, 0.02, 0.5)
@@ -249,6 +273,5 @@ end
 ClearScreen()
 DrawBackground()
 while true do
-PrintData()
-
+    PrintData()
 end
